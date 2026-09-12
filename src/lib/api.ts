@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { ZodError } from "zod";
 import { AuthError } from "@/lib/auth";
+import { AppError } from "@/lib/errors";
 import { limitRequest } from "@/lib/rate-limit";
 
 export function ok<T>(data: T, init?: ResponseInit) {
@@ -13,6 +14,7 @@ export function fail(message: string, status = 400, extra?: Record<string, unkno
 
 /** Single place where thrown errors become a clean JSON response. */
 export function handleError(error: unknown) {
+  if (error instanceof AppError) return fail(error.message, error.status);
   if (error instanceof AuthError) return fail(error.message, error.status);
   if (error instanceof ZodError) {
     const fieldErrors: Record<string, string> = {};
@@ -22,15 +24,11 @@ export function handleError(error: unknown) {
     }
     return fail("Please check the highlighted fields.", 422, { fieldErrors });
   }
-  if (error instanceof Error) {
-    const message = error.message || "Something went wrong.";
-    const isClientError =
-      message.includes("CSRF") || message.includes("Cross-origin") || message.startsWith("Invalid");
-    if (process.env.NODE_ENV !== "production" || isClientError) {
-      return fail(message, isClientError ? 403 : 500);
-    }
-  }
+  // Anything else is unexpected: log it and keep internals out of the response.
   console.error("[api]", error);
+  if (process.env.NODE_ENV !== "production" && error instanceof Error) {
+    return fail(error.message || "Something went wrong.", 500);
+  }
   return fail("Something went wrong on our side. Please try again.", 500);
 }
 

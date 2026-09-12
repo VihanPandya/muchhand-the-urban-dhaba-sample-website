@@ -204,6 +204,10 @@ export const reservationUpdateSchema = z.object({
   adminNote: z.string().trim().max(400).optional().nullable(),
 });
 
+export const messageUpdateSchema = z.object({
+  status: z.enum(["NEW", "READ", "ARCHIVED"]),
+});
+
 export const businessHourSchema = z.object({
   dayOfWeek: z.number().int().min(0).max(6),
   isOpen: z.boolean(),

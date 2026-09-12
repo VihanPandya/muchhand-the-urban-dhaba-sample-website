@@ -1,6 +1,7 @@
 import "server-only";
 import type { NextRequest } from "next/server";
-import { CSRF_COOKIE } from "@/lib/auth";
+import { CSRF_COOKIE } from "@/lib/session";
+import { AppError } from "@/lib/errors";
 
 /**
  * Double-submit CSRF check for admin mutations: the token in the (non-HttpOnly)
@@ -14,10 +15,10 @@ export function assertSameOrigin(req: NextRequest): void {
   const host = req.headers.get("host");
   try {
     if (new URL(origin).host !== host) {
-      throw new Error("Cross-origin request blocked.");
+      throw new AppError("Cross-origin request blocked.", 403);
     }
   } catch {
-    throw new Error("Cross-origin request blocked.");
+    throw new AppError("Cross-origin request blocked.", 403);
   }
 }
 
@@ -26,6 +27,6 @@ export function assertCsrf(req: NextRequest): void {
   const cookieToken = req.cookies.get(CSRF_COOKIE)?.value;
   const headerToken = req.headers.get("x-csrf-token");
   if (!cookieToken || !headerToken || cookieToken !== headerToken) {
-    throw new Error("Invalid or missing CSRF token. Please refresh and try again.");
+    throw new AppError("Invalid or missing CSRF token. Please refresh and try again.", 403);
   }
 }

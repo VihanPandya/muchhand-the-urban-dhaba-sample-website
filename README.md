@@ -1,1 +1,200 @@
-# muchhand-the-urban-dhaba-sample-website
+# Muchhad — The Urban Dhaba
+
+A complete, production-shaped restaurant website: menu, online ordering, WhatsApp / Zomato / Swiggy
+ordering, table reservations, offers, gallery, and a role-based admin panel that runs the whole
+operation without touching code.
+
+Built with **Next.js 15 (App Router) · TypeScript · Tailwind CSS v4 · Prisma · PostgreSQL**.
+
+---
+
+## Quick start
+
+```bash
+# 1. Install
+npm install
+
+# 2. Configure
+cp .env.example .env
+#    set DATABASE_URL, and generate a session secret:
+#    openssl rand -base64 48   ->  AUTH_SECRET
+
+# 3. Create the schema and load demo data
+npm run db:deploy      # or: npm run db:migrate  (development)
+npm run db:seed
+
+# 4. Run
+npm run dev            # http://localhost:3000
+```
+
+The seed prints the admin login it created. By default:
+
+| | |
+|---|---|
+| Admin panel | <http://localhost:3000/admin> |
+| Email | `admin@muchhad.test` (`SEED_ADMIN_EMAIL`) |
+| Password | `Admin@12345` (`SEED_ADMIN_PASSWORD`) |
+
+It also creates a **Manager** (`manager@muchhad.test`) and a **Staff** (`staff@muchhad.test`) account
+with the same password, so you can see how role-based access changes the panel.
+
+> **Change these before deploying anywhere public.**
+
+---
+
+## What's included
+
+### Public website
+
+| Route | What it does |
+|---|---|
+| `/` | Hero, highlights, featured dishes, categories, order options, offers, gallery, reviews |
+| `/menu` | Full menu with instant search and Veg / Non-veg / Bestseller / New / Spicy / Jain / Vegan filters |
+| `/menu/[category]` | Single category listing |
+| `/dish/[slug]` | Dish detail — ingredients, allergens, portions, add-ons, quantity, cart + WhatsApp |
+| `/cart` · `/checkout` | Cart, coupons, delivery/pickup, customer details, payment method |
+| `/order-status/[orderNumber]` | Order confirmation and live status tracking |
+| `/order` | Order Online hub: direct, Zomato, Swiggy, WhatsApp |
+| `/order/zomato` · `/order/swiggy` | Aggregator landing pages (configurable official links) |
+| `/whatsapp-order` | Builds a ready-to-send WhatsApp order from the cart, with a live preview |
+| `/reserve` | Table reservation |
+| `/offers` | Coupons and promotions |
+| `/gallery` | Filterable masonry gallery with a keyboard-navigable lightbox |
+| `/about` · `/reviews` · `/contact` · `/find-us` | Story, testimonials, contact form, map and directions |
+
+### Admin panel (`/admin`)
+
+Dashboard (today's orders, revenue, pending work, charts) · Orders (7 statuses, inline updates,
+order detail) · Reservations (confirm / reject / reschedule / cancel / complete, date range filters) ·
+Menu (full dish CRUD with portions, add-ons, labels, image upload) · Categories · Offers & coupons ·
+Customers · Inbox · Content (CMS for the hero, highlights and about page) · Gallery · Testimonials ·
+Settings (hours, ordering, payments, SEO, notifications) · Integrations (WhatsApp templates, Zomato,
+Swiggy, maps, social) · Analytics (revenue, AOV, best sellers, categories, trends) · Team & roles.
+
+### API
+
+Public: `GET /api/settings`, `GET /api/categories`, `GET /api/dishes`, `GET /api/dishes/:id`,
+`POST /api/orders`, `GET /api/orders/:orderNumber`, `POST /api/reservations`, `POST /api/contact`,
+`POST /api/coupons/validate`.
+
+Admin (session + CSRF required): `POST /api/auth/login`, `POST /api/auth/logout`,
+`GET|POST /api/admin/:resource`, `GET|PUT|DELETE /api/admin/:resource/:id`
+(`dishes`, `categories`, `coupons`, `testimonials`, `gallery`, `orders`, `reservations`, `customers`,
+`messages`, `admins`), plus `/api/admin/settings`, `/api/admin/content`, `/api/admin/analytics`,
+`/api/admin/notifications`, `/api/admin/upload`.
+
+---
+
+## How the integrations actually work
+
+**WhatsApp — fully working.** The number, country code and message templates live in the database
+(Admin → Integrations). The frontend builds the message from the live cart — items, portions,
+add-ons, notes, order type, address and total — URL-encodes it and opens `https://wa.me/<number>?text=…`.
+Templates use `{{variables}}`; the admin screen lists them and shows a live preview you can test.
+
+**Zomato and Swiggy — configurable official links, not API integrations.** Neither platform offers a
+public ordering API to restaurants, so pretending otherwise would be dishonest. The admin stores the
+restaurant's official listing URL and every CTA links there; pages show *Connected / Not connected*
+based on whether a URL is set. Nothing is scraped from either platform. If you are ever granted API
+credentials, the server-side integration slots in behind the same settings without redesigning the
+site.
+
+**Payments.** Cash on delivery and UPI work today. Online payment is wired for an Indian gateway
+(Razorpay by default) and stays switched off until `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` are
+present — orders are then saved as *payment pending* rather than silently claiming to be paid. Keys
+are read server-side only and never reach the browser.
+
+**Email notifications.** Resend-compatible. Without `EMAIL_API_KEY` the app logs that it skipped
+delivery instead of reporting a success that never happened. Dashboard notifications always work.
+
+---
+
+## Security
+
+- Session-based admin auth: bcrypt (cost 12) password hashing, signed HS256 session cookie
+  (`HttpOnly`, `SameSite=Lax`, `Secure` in production, 8-hour expiry)
+- Edge middleware blocks `/admin` and `/api/admin` before they run; every admin route re-checks the
+  session against the database, so deactivated accounts and bumped `sessionVersion` stop working at once
+- Role-based access (Super Admin / Manager / Staff) with per-account permission overrides, enforced
+  server-side on every request and used to build the sidebar
+- Double-submit CSRF tokens plus an Origin check on all admin mutations
+- Rate limiting on login, orders, reservations, contact, coupon checks and uploads
+- Zod validation on every request body; **order totals are always recomputed server-side** from
+  database prices, so a tampered client can't set its own price
+- Uploads restricted by MIME type and size; `passwordHash` is stripped from every API response
+- Secrets only in environment variables — never in the database, the client bundle, or the repo
+
+---
+
+## Performance, SEO and accessibility
+
+- Static rendering with ISR for public pages, `force-dynamic` only where data must be live
+- `next/image` with AVIF/WebP, responsive `sizes`, lazy loading below the fold
+- Self-hosted fonts via `next/font`, no runtime CSS framework, dependency-free SVG charts
+- Restaurant / Menu / MenuItem / Breadcrumb JSON-LD, per-page metadata, Open Graph, canonical URLs,
+  `sitemap.xml`, `robots.txt`, web manifest
+- Semantic HTML, labelled controls, visible focus rings, `aria-live` regions, keyboard-navigable
+  lightbox and menus, `prefers-reduced-motion` support, WCAG-compliant contrast
+
+---
+
+## Demo imagery
+
+Every image is generated locally by `scripts/generate-images.mjs` — stylised SVG food art rendered to
+WebP, deterministic per dish slug. It exists so a fresh install looks complete without shipping
+licensed photography.
+
+**Replace it with real photos.** Every image path is stored in the database and editable from the
+admin panel (Menu → dish, Categories, Gallery, Content, Settings). Uploads go to `/public/uploads` by
+default; switch `IMAGE_STORAGE_DRIVER` and add an adapter in `src/app/api/admin/upload/route.ts` for
+S3 or Cloudinary.
+
+```bash
+npm run images:generate    # rebuild the placeholder set
+```
+
+---
+
+## Project layout
+
+```
+data/menu.json             Menu catalogue used by the seed and the image generator
+prisma/schema.prisma       20 models: menu, orders, reservations, coupons, CMS, settings, admins
+prisma/seed.ts             Demo data: 8 categories, 47 dishes, 60 days of orders, offers, reviews
+scripts/                   Placeholder image generator
+src/app/(site)/            Public website
+src/app/admin/             Admin panel (login + (panel) route group)
+src/app/api/               Public and admin REST API
+src/components/            UI: site chrome, menu, ordering, forms, admin toolkit
+src/lib/                   Data access, auth, pricing, settings, WhatsApp, SEO, analytics
+```
+
+Money is stored as `Decimal(10,2)` and serialised to plain numbers at the API boundary
+(`src/lib/serialize.ts`). Pricing logic is shared between the cart UI and the server
+(`src/lib/pricing.ts`) so the customer never sees a total the server disagrees with.
+
+---
+
+## Scripts
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Development server |
+| `npm run build` / `start` | Production build and server |
+| `npm run typecheck` / `lint` | TypeScript and ESLint |
+| `npm run db:migrate` / `db:deploy` | Apply migrations (dev / production) |
+| `npm run db:seed` / `db:reset` | Load demo data / reset the database |
+| `npm run images:generate` | Rebuild placeholder imagery |
+
+## Deploying
+
+1. Provision PostgreSQL and set `DATABASE_URL`.
+2. Set `AUTH_SECRET` (32+ characters) and `NEXT_PUBLIC_SITE_URL`.
+3. `npm run db:deploy` then `npm run db:seed` (seed once, then edit through the admin panel).
+4. `npm run build && npm start`.
+5. Sign in to `/admin`, change the seeded passwords, and update Settings and Integrations with the
+   real address, phone, WhatsApp number and aggregator links.
+
+Note that rate limiting and the default upload driver keep state on one instance. For multi-instance
+or serverless hosting, move the limiter to Redis and uploads to object storage — both are isolated
+behind a single module each.

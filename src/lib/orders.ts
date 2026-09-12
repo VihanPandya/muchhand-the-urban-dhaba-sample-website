@@ -4,18 +4,14 @@ import { prisma } from "@/lib/prisma";
 import { toNumber } from "@/lib/money";
 import { computeTotals, type CouponLike } from "@/lib/pricing";
 import { getSettings } from "@/lib/settings";
+import { AppError } from "@/lib/errors";
 import type { z } from "zod";
 import type { createOrderSchema } from "@/lib/validation";
 
 export type CreateOrderInput = z.infer<typeof createOrderSchema>;
 
-export class OrderError extends Error {
-  status: number;
-  constructor(message: string, status = 400) {
-    super(message);
-    this.status = status;
-  }
-}
+/** Kept as a named subclass so order routes can catch ordering problems alone. */
+export class OrderError extends AppError {}
 
 export function generateOrderNumber(now = new Date()): string {
   const stamp = now.toISOString().slice(2, 10).replace(/-/g, "");

@@ -1,35 +1,21 @@
 import "server-only";
 import { cookies } from "next/headers";
-import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
 import type { AdminRole } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { permissionsFor, type Permission } from "@/lib/permissions";
+import {
+  createSessionToken,
+  readSessionToken,
+  CSRF_COOKIE,
+  SESSION_COOKIE,
+  SESSION_TTL_SECONDS,
+  type SessionPayload,
+} from "@/lib/session";
 
-export const SESSION_COOKIE = "mud_session";
-export const CSRF_COOKIE = "mud_csrf";
-const SESSION_TTL_SECONDS = 60 * 60 * 8; // 8 hours
-
-export type SessionPayload = {
-  sub: string;
-  email: string;
-  name: string;
-  role: AdminRole;
-  /** Session version — bumped on the admin record to revoke issued tokens. */
-  v: number;
-};
+export { readSessionToken, SESSION_COOKIE, CSRF_COOKIE, type SessionPayload } from "@/lib/session";
 
 export type AdminActor = SessionPayload & { permissions: Permission[] };
-
-function secret(): Uint8Array {
-  const value = process.env.AUTH_SECRET;
-  if (!value || value.length < 32) {
-    throw new Error(
-      "AUTH_SECRET is missing or too short (needs 32+ characters). Set it in your environment.",
-    );
-  }
-  return new TextEncoder().encode(value);
-}
 
 export function hashPassword(plain: string): Promise<string> {
   return bcrypt.hash(plain, 12);
@@ -37,32 +23,6 @@ export function hashPassword(plain: string): Promise<string> {
 
 export function verifyPassword(plain: string, hash: string): Promise<boolean> {
   return bcrypt.compare(plain, hash);
-}
-
-export async function createSessionToken(payload: SessionPayload): Promise<string> {
-  return new SignJWT({ ...payload })
-    .setProtectedHeader({ alg: "HS256" })
-    .setSubject(payload.sub)
-    .setIssuedAt()
-    .setExpirationTime(`${SESSION_TTL_SECONDS}s`)
-    .sign(secret());
-}
-
-export async function readSessionToken(token: string | undefined): Promise<SessionPayload | null> {
-  if (!token) return null;
-  try {
-    const { payload } = await jwtVerify(token, secret(), { algorithms: ["HS256"] });
-    if (!payload.sub || typeof payload.role !== "string") return null;
-    return {
-      sub: payload.sub,
-      email: String(payload.email ?? ""),
-      name: String(payload.name ?? ""),
-      role: payload.role as AdminRole,
-      v: Number(payload.v ?? 1),
-    };
-  } catch {
-    return null;
-  }
 }
 
 export async function startSession(admin: {
