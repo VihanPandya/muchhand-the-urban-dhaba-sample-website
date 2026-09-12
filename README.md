@@ -35,8 +35,9 @@ npm run db:seed        # load the demo menu, offers and orders
 npm run dev            # http://localhost:3000
 ```
 
-`DATABASE_URL` and `AUTH_SECRET` are both required — Prisma fails with
-`Environment variable not found: DATABASE_URL` if `.env` is missing or empty.
+`DATABASE_URL` and `AUTH_SECRET` are both required. `DATABASE_URL` fails immediately with
+`Environment variable not found: DATABASE_URL`; a missing `AUTH_SECRET` fails later, the first time
+you try to sign in to the admin panel, so set both now.
 
 ### Getting a database
 

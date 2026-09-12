@@ -12,6 +12,30 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { DEFAULT_ORDER_TEMPLATE, DEFAULT_RESERVATION_TEMPLATE } from "../src/lib/whatsapp";
 
+// The Prisma CLI loads .env for `migrate` and `generate`, but this script runs
+// as a plain Node process, so load it ourselves before the client is created.
+// Missing file is fine — hosting platforms inject real environment variables.
+try {
+  process.loadEnvFile();
+} catch {
+  /* no .env on disk */
+}
+
+if (!process.env.DATABASE_URL) {
+  console.error(
+    [
+      "DATABASE_URL is not set, so there is no database to seed.",
+      "",
+      "  1. cp .env.example .env",
+      "  2. set DATABASE_URL in .env, for example:",
+      '     DATABASE_URL="postgresql://YOUR_USER@localhost:5432/muchhad?schema=public"',
+      "",
+      "See the README section \"Getting a database\" for the options.",
+    ].join("\n"),
+  );
+  process.exit(1);
+}
+
 const prisma = new PrismaClient();
 
 type MenuFile = {
