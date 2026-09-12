@@ -10,22 +10,57 @@ Built with **Next.js 15 (App Router) · TypeScript · Tailwind CSS v4 · Prisma 
 
 ## Quick start
 
+You need **Node 20+** and a **PostgreSQL 14+** database. If you don't have Postgres yet, pick one of
+the options in [Getting a database](#getting-a-database) below first.
+
 ```bash
-# 1. Install
+# 1. Install dependencies
 npm install
 
-# 2. Configure
+# If npm reports that install scripts were blocked, approve them —
+# sharp needs its install step for image optimisation:
+npm approve-scripts --allow-scripts-pending
+
+# 2. Create your env file (note the `cp` — this step is easy to miss)
 cp .env.example .env
-#    set DATABASE_URL, and generate a session secret:
-#    openssl rand -base64 48   ->  AUTH_SECRET
 
-# 3. Create the schema and load demo data
-npm run db:deploy      # or: npm run db:migrate  (development)
-npm run db:seed
+# 3. Generate a session secret and paste it into .env as AUTH_SECRET
+openssl rand -base64 48
 
-# 4. Run
+# 4. Edit .env and set DATABASE_URL and AUTH_SECRET, then:
+npm run db:deploy      # create the schema  (dev alternative: npm run db:migrate)
+npm run db:seed        # load the demo menu, offers and orders
+
+# 5. Run it
 npm run dev            # http://localhost:3000
 ```
+
+`DATABASE_URL` and `AUTH_SECRET` are both required — Prisma fails with
+`Environment variable not found: DATABASE_URL` if `.env` is missing or empty.
+
+### Getting a database
+
+**Homebrew (macOS):**
+
+```bash
+brew install postgresql@16
+brew services start postgresql@16
+createdb muchhad
+# DATABASE_URL="postgresql://YOUR_MAC_USERNAME@localhost:5432/muchhad?schema=public"
+```
+
+A Homebrew install has no password and uses your system username, so the URL has no `:password` part.
+[Postgres.app](https://postgresapp.com) works the same way.
+
+**Docker:**
+
+```bash
+docker run -d --name muchhad-db -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:16
+# DATABASE_URL="postgresql://postgres:postgres@localhost:5432/postgres?schema=public"
+```
+
+**Hosted (Neon, Supabase, Railway):** create a database and paste the connection string it gives you
+into `DATABASE_URL`. Add `?sslmode=require` if the provider asks for it.
 
 The seed prints the admin login it created. By default:
 
