@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, ApiError, type ListResponse } from "@/components/admin/api";
 import { useToast } from "@/components/providers/toast";
 import { AdminCard, EmptyRow, Modal, Pagination, StatusBadge, TableWrap, Td, Th, AdminField, Alert } from "@/components/admin/ui";
-import { IconSearch } from "@/components/icons";
+import { IconSearch, IconWhatsapp } from "@/components/icons";
+import { buildCustomerWhatsappLink, renderTemplate } from "@/lib/whatsapp";
 
 type ReservationRow = {
   id: string;
@@ -35,7 +36,15 @@ function dayKey(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
-export function ReservationsManager({ canUpdate }: { canUpdate: boolean }) {
+export function ReservationsManager({
+  canUpdate,
+  restaurantName,
+  countryCode,
+}: {
+  canUpdate: boolean;
+  restaurantName: string;
+  countryCode: string;
+}) {
   const { toast } = useToast();
   const [data, setData] = useState<ListResponse<ReservationRow> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -233,6 +242,29 @@ export function ReservationsManager({ canUpdate }: { canUpdate: boolean }) {
                               Completed
                             </button>
                           ) : null}
+                          <a
+                            href={buildCustomerWhatsappLink(
+                              countryCode,
+                              row.phone,
+                              renderTemplate(
+                                "Hello {{name}}, this is {{restaurant}}. Your table for {{guests}} on {{date}} at {{time}} is confirmed. Reference {{reference}}. See you soon!",
+                                {
+                                  name: row.name,
+                                  restaurant: restaurantName,
+                                  guests: row.guests,
+                                  date: row.date.slice(0, 10),
+                                  time: row.time,
+                                  reference: row.reference,
+                                },
+                              ),
+                            )}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn btn-sm btn-whatsapp"
+                            aria-label={`Message ${row.name} on WhatsApp`}
+                          >
+                            <IconWhatsapp className="h-4 w-4" />
+                          </a>
                           <button type="button" className="btn btn-sm btn-outline" onClick={() => setEditing(row)}>
                             Reschedule
                           </button>

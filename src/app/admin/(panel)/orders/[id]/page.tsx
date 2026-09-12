@@ -5,6 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { formatMoney, toNumber } from "@/lib/money";
 import { AdminCard, StatusBadge, TableWrap, Td, Th } from "@/components/admin/ui";
 import { OrderStatusControl } from "@/components/admin/order-status-control";
+import { getSettings } from "@/lib/settings";
+import { buildCustomerWhatsappLink, renderTemplate } from "@/lib/whatsapp";
+import { IconPhone, IconWhatsapp } from "@/components/icons";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Order" };
@@ -19,6 +22,21 @@ export default async function AdminOrderDetail({ params }: { params: Promise<{ i
     include: { items: true, customer: true, payments: { orderBy: { createdAt: "desc" } } },
   });
   if (!order) notFound();
+
+  const settings = await getSettings();
+  const whatsappHref = buildCustomerWhatsappLink(
+    settings.whatsappCountryCode,
+    order.phone,
+    renderTemplate(
+      "Hello {{name}}, this is {{restaurant}} about your order {{order_number}} ({{total}}).",
+      {
+        name: order.customerName,
+        restaurant: settings.name,
+        order_number: order.orderNumber,
+        total: formatMoney(order.total),
+      },
+    ),
+  );
 
   return (
     <div className="space-y-5">
@@ -144,11 +162,19 @@ export default async function AdminOrderDetail({ params }: { params: Promise<{ i
                 />
               ) : null}
             </dl>
-            {order.customer ? (
-              <Link href="/admin/customers" className="btn btn-sm btn-outline mt-4 w-full">
-                Open customer list
-              </Link>
-            ) : null}
+            <div className="mt-4 space-y-2">
+              <a href={whatsappHref} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-whatsapp w-full">
+                <IconWhatsapp className="h-4 w-4" /> Message the customer
+              </a>
+              <a href={`tel:${order.phone}`} className="btn btn-sm btn-outline w-full">
+                <IconPhone className="h-4 w-4" /> Call {order.phone}
+              </a>
+              {order.customer ? (
+                <Link href="/admin/customers" className="btn btn-sm btn-outline w-full">
+                  Open customer list
+                </Link>
+              ) : null}
+            </div>
           </AdminCard>
         </div>
       </div>

@@ -29,6 +29,15 @@ export function buildWhatsappLink(
   return `https://wa.me/${phone}?text=${text}`;
 }
 
+/**
+ * A link that messages a *customer* (order updates, reservation
+ * confirmations) rather than the restaurant. The number is the customer's own,
+ * so the restaurant's country code is used to normalise it.
+ */
+export function buildCustomerWhatsappLink(countryCode: string, customerPhone: string, message: string): string {
+  return buildWhatsappLink(countryCode, customerPhone, message);
+}
+
 export type WhatsappOrderItem = {
   name: string;
   quantity: number;

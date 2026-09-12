@@ -45,7 +45,7 @@ export function CheckoutForm() {
   const firstEnabled = paymentOptions.find((option) => option.enabled)?.key ?? "COD";
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(firstEnabled);
 
-  const { coupon, apply: applyCoupon, clear: clearCoupon } = useAppliedCoupon(subtotal, form.phone);
+  const { coupon, rejection, apply: applyCoupon, clear: clearCoupon } = useAppliedCoupon(subtotal, form.phone);
   const totals = useOrderTotals(lines, orderType, coupon);
 
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -335,6 +335,7 @@ export function CheckoutForm() {
           <CouponField
             subtotal={subtotal}
             applied={coupon}
+            rejection={rejection}
             onApply={applyCoupon}
             onClear={clearCoupon}
             phone={form.phone}

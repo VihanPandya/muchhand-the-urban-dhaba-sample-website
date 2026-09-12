@@ -19,7 +19,7 @@ export function CartView() {
     "mud_order_type",
     settings.deliveryEnabled ? "DELIVERY" : "PICKUP",
   );
-  const { coupon, apply: applyCoupon, clear: clearCoupon } = useAppliedCoupon(subtotal);
+  const { coupon, rejection, apply: applyCoupon, clear: clearCoupon } = useAppliedCoupon(subtotal);
 
   if (!hydrated) {
     return (
@@ -85,6 +85,7 @@ export function CartView() {
           <CouponField
             subtotal={subtotal}
             applied={coupon}
+            rejection={rejection}
             onApply={applyCoupon}
             onClear={clearCoupon}
           />

@@ -12,17 +12,21 @@ export function CouponField({
   onApply,
   onClear,
   phone,
+  /** Why a previously applied coupon stopped working, if it did. */
+  rejection,
 }: {
   subtotal: number;
   applied: AppliedCoupon | null;
   onApply: (coupon: AppliedCoupon) => void;
   onClear: () => void;
   phone?: string;
+  rejection?: string | null;
 }) {
   const { toast } = useToast();
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const message = error ?? rejection ?? null;
 
   const apply = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -93,17 +97,17 @@ export function CouponField({
             onChange={(event) => setCode(event.target.value.toUpperCase())}
             placeholder="FIRST10"
             maxLength={20}
-            aria-invalid={error ? true : undefined}
-            aria-describedby={error ? "coupon-error" : undefined}
+            aria-invalid={message ? true : undefined}
+            aria-describedby={message ? "coupon-error" : undefined}
           />
         </div>
         <button type="submit" className="btn btn-dark" disabled={busy || !code.trim()}>
           {busy ? "Checking…" : "Apply"}
         </button>
       </div>
-      {error ? (
+      {message ? (
         <p id="coupon-error" className="mt-2 text-sm text-tandoor-600" role="alert">
-          {error}
+          {message}
         </p>
       ) : null}
     </form>
@@ -118,11 +122,13 @@ export function CouponField({
 export function useAppliedCoupon(subtotal: number, phone?: string) {
   const [code, setCode] = usePersistedState<string>("mud_coupon", "");
   const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
+  const [rejection, setRejection] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     if (!code || subtotal <= 0) {
       setCoupon(null);
+      setRejection(null);
       return;
     }
     (async () => {
@@ -135,7 +141,9 @@ export function useAppliedCoupon(subtotal: number, phone?: string) {
         const payload = await response.json();
         if (cancelled) return;
         if (!response.ok || !payload.ok) {
+          // Say why instead of letting the discount quietly disappear.
           setCoupon(null);
+          setRejection(`${code} no longer applies — ${payload.error ?? "it isn't valid for this order."}`);
           return;
         }
         setCoupon({
@@ -146,8 +154,12 @@ export function useAppliedCoupon(subtotal: number, phone?: string) {
           maxDiscount: null,
           minOrderValue: 0,
         });
+        setRejection(null);
       } catch {
-        if (!cancelled) setCoupon(null);
+        if (!cancelled) {
+          setCoupon(null);
+          setRejection("We couldn't re-check your coupon. It will be verified when you place the order.");
+        }
       }
     })();
     return () => {
@@ -158,13 +170,16 @@ export function useAppliedCoupon(subtotal: number, phone?: string) {
   return {
     coupon,
     code,
+    rejection,
     apply: (applied: AppliedCoupon) => {
       setCode(applied.code);
       setCoupon(applied);
+      setRejection(null);
     },
     clear: () => {
       setCode("");
       setCoupon(null);
+      setRejection(null);
     },
   };
 }
