@@ -1,0 +1,20 @@
+# Netlify deployment for Muchhad — The Urban Dhaba
+#
+# Requires these environment variables in Site configuration → Environment
+# variables (DATABASE_URL is needed at BUILD time too, because pages read the
+# restaurant settings while being pre-rendered):
+#
+#   DATABASE_URL         pooled PostgreSQL connection string
+#   AUTH_SECRET          32+ characters — openssl rand -base64 48
+#   NEXT_PUBLIC_SITE_URL https://your-site.netlify.app
+#   RESTAURANT_TIMEZONE  Asia/Kolkata (optional, this is the default)
+
+[build]
+  command = "npm run build:netlify"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"

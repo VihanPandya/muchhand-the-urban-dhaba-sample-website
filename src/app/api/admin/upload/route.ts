@@ -1,10 +1,8 @@
 import type { NextRequest } from "next/server";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { randomUUID } from "node:crypto";
 import { fail, guardRate, handleError, ok } from "@/lib/api";
 import { assertCsrf } from "@/lib/csrf";
 import { requireAdmin } from "@/lib/auth";
+import { buildImageKey, storeImage } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,11 +18,8 @@ const ALLOWED = new Map([
 
 /**
  * POST /api/admin/upload — image upload for dishes, categories and the gallery.
- *
- * The default driver writes to /public/uploads, which suits a single server.
- * For multi-instance or serverless hosting set IMAGE_STORAGE_DRIVER to your
- * object store and put the upload call for it here — everything else in the app
- * only ever sees the returned URL.
+ * Where the bytes land is decided by src/lib/storage.ts: the local public
+ * folder when self-hosting, Netlify Blobs when deployed to Netlify.
  */
 export async function POST(req: NextRequest) {
   const limited = guardRate(req, "upload", 30, 60_000);
@@ -42,21 +37,10 @@ export async function POST(req: NextRequest) {
     const extension = ALLOWED.get(file.type);
     if (!extension) return fail("Only JPG, PNG, WebP, AVIF or GIF images are allowed.", 415);
 
-    const driver = process.env.IMAGE_STORAGE_DRIVER || "local";
-    if (driver !== "local") {
-      return fail(
-        `IMAGE_STORAGE_DRIVER is set to "${driver}", but no cloud storage adapter is configured in this deployment. Add one in src/app/api/admin/upload/route.ts or switch the driver back to "local".`,
-        501,
-      );
-    }
-
     const bytes = Buffer.from(await file.arrayBuffer());
-    const name = `${Date.now()}-${randomUUID().slice(0, 8)}.${extension}`;
-    const directory = path.join(process.cwd(), "public", "uploads");
-    await mkdir(directory, { recursive: true });
-    await writeFile(path.join(directory, name), bytes);
+    const { url, driver } = await storeImage(buildImageKey(extension), bytes, file.type);
 
-    return ok({ url: `/uploads/${name}`, size: file.size, type: file.type }, { status: 201 });
+    return ok({ url, size: file.size, type: file.type, driver }, { status: 201 });
   } catch (error) {
     return handleError(error);
   }

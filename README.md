@@ -224,13 +224,85 @@ Money is stored as `Decimal(10,2)` and serialised to plain numbers at the API bo
 
 ## Deploying
 
+### Netlify
+
+The repo ships a `netlify.toml` and the Next.js runtime plugin, so a Netlify
+deploy is mostly configuration. Netlify runs the app as serverless functions,
+which changes two things: there is no local disk, and there is no database.
+
+**1. Get a PostgreSQL database.** Netlify doesn't host one. [Neon](https://neon.tech)
+and [Supabase](https://supabase.com) both have free tiers. Use the **pooled**
+connection string — serverless functions open far more connections than a direct
+Postgres connection can take:
+
+| Provider | Use |
+|---|---|
+| Neon | the connection string containing `-pooler` |
+| Supabase | the *Connection pooling* string (port `6543`), with `?pgbouncer=true` appended |
+
+**2. Connect the repo** at <https://app.netlify.com/start> → GitHub → this
+repository. Leave the build settings alone; `netlify.toml` sets them.
+
+**3. Set environment variables** under Site configuration → Environment
+variables, for **all** deploy contexts:
+
+```
+DATABASE_URL          your pooled connection string
+AUTH_SECRET           openssl rand -base64 48
+NEXT_PUBLIC_SITE_URL  https://your-site.netlify.app
+RESTAURANT_TIMEZONE   Asia/Kolkata
+```
+
+`DATABASE_URL` has to be available at **build** time as well as at runtime —
+the menu and dish pages read the restaurant settings while being pre-rendered,
+so the build fails without it. Optional: `EMAIL_API_KEY` and `EMAIL_FROM` for
+email notifications, `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` to enable
+online payment.
+
+**4. Deploy.** The build runs `prisma generate && prisma migrate deploy &&
+next build`, so your schema is created on the first deploy and kept in step with
+the code on every later one.
+
+**5. Seed the demo data once**, from your machine, pointed at the hosted
+database (Netlify's build environment is fine for migrations but not the place
+to run one-off scripts):
+
+```bash
+DATABASE_URL="your-pooled-connection-string" npm run db:seed
+```
+
+**6. Sign in** at `https://your-site.netlify.app/admin`, change the seeded
+passwords immediately, then set the real address, phone, WhatsApp number and
+aggregator links under Settings and Integrations.
+
+Notes specific to serverless:
+
+- **Image uploads switch to Netlify Blobs automatically** (`NETLIFY` is set in
+  the runtime), served back through `/api/uploads/<key>`. Nothing to configure —
+  but be aware the demo imagery in `/public/images` is committed to the repo and
+  served as static files, while anything you upload lives in Blobs.
+- **Rate limiting is per-instance.** The in-memory limiter in
+  `src/lib/rate-limit.ts` still blunts brute-force attempts, but each function
+  instance keeps its own counters, so the effective limit is higher than the
+  number configured. Move the store to Upstash Redis or Netlify Blobs if you
+  need a hard guarantee.
+- **`prisma migrate deploy` runs on every deploy.** It only applies pending
+  migrations and never drops data, but it does mean a bad migration ships with
+  a bad build — review `prisma/migrations` before merging.
+
+### Anywhere else (VPS, Fly, Render, a container)
+
+A long-running Node server is the simpler deployment: the local upload driver
+works, the rate limiter is accurate, and you can use a direct (unpooled)
+database connection.
+
 1. Provision PostgreSQL and set `DATABASE_URL`.
 2. Set `AUTH_SECRET` (32+ characters) and `NEXT_PUBLIC_SITE_URL`.
-3. `npm run db:deploy` then `npm run db:seed` (seed once, then edit through the admin panel).
+3. `npm run db:deploy` then `npm run db:seed` (seed once, then edit through the
+   admin panel).
 4. `npm run build && npm start`.
-5. Sign in to `/admin`, change the seeded passwords, and update Settings and Integrations with the
-   real address, phone, WhatsApp number and aggregator links.
+5. Sign in to `/admin`, change the seeded passwords, and update Settings and
+   Integrations with the real details.
 
-Note that rate limiting and the default upload driver keep state on one instance. For multi-instance
-or serverless hosting, move the limiter to Redis and uploads to object storage — both are isolated
-behind a single module each.
+Persist `/public/uploads` on a volume if you use the local storage driver — a
+fresh container otherwise starts without the images your admins uploaded.

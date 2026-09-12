@@ -4,6 +4,11 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   compress: true,
+  // Serverless bundles trace imports, which misses Prisma's engine binary
+  // because it is loaded at runtime by path. Ship it with every function.
+  outputFileTracingIncludes: {
+    "/**": ["./node_modules/.prisma/client/**"],
+  },
   images: {
     formats: ["image/avif", "image/webp"],
     // Remote photography (e.g. a CDN or object storage bucket) can be enabled by
@@ -14,6 +19,10 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "images.unsplash.com" },
     ],
     deviceSizes: [360, 480, 640, 828, 1080, 1280, 1920],
+  },
+  async rewrites() {
+    // Rows created before uploads moved behind the API keep working.
+    return [{ source: "/uploads/:key", destination: "/api/uploads/:key" }];
   },
   async headers() {
     return [
