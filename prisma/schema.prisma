@@ -1,0 +1,499 @@
+// Muchhad — The Urban Dhaba
+// Prisma schema: relational model for menu, ordering, reservations, CMS and admin.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Admin, roles & permissions
+// ---------------------------------------------------------------------------
+
+enum AdminRole {
+  SUPER_ADMIN
+  MANAGER
+  STAFF
+}
+
+model Admin {
+  id             String    @id @default(cuid())
+  name           String
+  email          String    @unique
+  passwordHash   String
+  role           AdminRole @default(STAFF)
+  /// Optional per-user permission overrides. Empty = use role defaults.
+  permissions    String[]  @default([])
+  active         Boolean   @default(true)
+  /// Bumped to invalidate every issued session for this admin.
+  sessionVersion Int       @default(1)
+  lastLoginAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([role])
+}
+
+// ---------------------------------------------------------------------------
+// Customers
+// ---------------------------------------------------------------------------
+
+model Customer {
+  id           String        @id @default(cuid())
+  name         String
+  phone        String        @unique
+  email        String?
+  addressLine  String?
+  landmark     String?
+  pincode      String?
+  ordersCount  Int           @default(0)
+  totalSpend   Decimal       @default(0) @db.Decimal(12, 2)
+  lastOrderAt  DateTime?
+  notes        String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  orders       Order[]
+  reservations Reservation[]
+
+  @@index([createdAt])
+  @@index([name])
+}
+
+// ---------------------------------------------------------------------------
+// Menu
+// ---------------------------------------------------------------------------
+
+model Category {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  description  String?
+  imageUrl     String?
+  displayOrder Int      @default(0)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  dishes       Dish[]
+
+  @@index([displayOrder])
+}
+
+model Dish {
+  id              String        @id @default(cuid())
+  name            String
+  slug            String        @unique
+  categoryId      String
+  category        Category      @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  description     String
+  longDescription String?
+  price           Decimal       @db.Decimal(10, 2)
+  discountPrice   Decimal?      @db.Decimal(10, 2)
+  imageUrl        String?
+  isVeg           Boolean       @default(true)
+  isJain          Boolean       @default(false)
+  isVegan         Boolean       @default(false)
+  isBestseller    Boolean       @default(false)
+  isNew           Boolean       @default(false)
+  isFeatured      Boolean       @default(false)
+  /// 0 = none, 1 = mild, 2 = medium, 3 = hot
+  spiceLevel      Int           @default(0)
+  ingredients     String[]      @default([])
+  allergens       String[]      @default([])
+  portionSize     String?
+  available       Boolean       @default(true)
+  displayOrder    Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  variants        DishVariant[]
+  addOns          AddOn[]
+  orderItems      OrderItem[]
+
+  @@index([categoryId])
+  @@index([available])
+  @@index([isFeatured])
+  @@index([displayOrder])
+}
+
+model DishVariant {
+  id           String  @id @default(cuid())
+  dishId       String
+  dish         Dish    @relation(fields: [dishId], references: [id], onDelete: Cascade)
+  name         String
+  price        Decimal @db.Decimal(10, 2)
+  isDefault    Boolean @default(false)
+  displayOrder Int     @default(0)
+
+  @@index([dishId])
+}
+
+model AddOn {
+  id           String  @id @default(cuid())
+  /// Null = available across the whole menu.
+  dishId       String?
+  dish         Dish?   @relation(fields: [dishId], references: [id], onDelete: Cascade)
+  name         String
+  price        Decimal @db.Decimal(10, 2)
+  active       Boolean @default(true)
+  displayOrder Int     @default(0)
+
+  @@index([dishId])
+}
+
+// ---------------------------------------------------------------------------
+// Orders
+// ---------------------------------------------------------------------------
+
+enum OrderType {
+  DELIVERY
+  PICKUP
+}
+
+enum OrderStatus {
+  NEW
+  CONFIRMED
+  PREPARING
+  READY
+  OUT_FOR_DELIVERY
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  COD
+  UPI
+  ONLINE
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum OrderSource {
+  WEB
+  WHATSAPP
+  PHONE
+  ADMIN
+}
+
+model Order {
+  id             String        @id @default(cuid())
+  orderNumber    String        @unique
+  customerId     String?
+  customer       Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerName   String
+  phone          String
+  email          String?
+  type           OrderType     @default(DELIVERY)
+  status         OrderStatus   @default(NEW)
+  addressLine    String?
+  landmark       String?
+  pincode        String?
+  notes          String?
+  subtotal       Decimal       @db.Decimal(10, 2)
+  taxAmount      Decimal       @default(0) @db.Decimal(10, 2)
+  deliveryFee    Decimal       @default(0) @db.Decimal(10, 2)
+  discountAmount Decimal       @default(0) @db.Decimal(10, 2)
+  total          Decimal       @db.Decimal(10, 2)
+  couponCode     String?
+  paymentMethod  PaymentMethod @default(COD)
+  paymentStatus  PaymentStatus @default(PENDING)
+  source         OrderSource   @default(WEB)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  items          OrderItem[]
+  payments       Payment[]
+  couponUsages   CouponUsage[]
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([phone])
+}
+
+model OrderItem {
+  id          String  @id @default(cuid())
+  orderId     String
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  dishId      String?
+  dish        Dish?   @relation(fields: [dishId], references: [id], onDelete: SetNull)
+  dishName    String
+  variantName String?
+  /// Snapshot of chosen add-ons: [{ name, price }]
+  addOns      Json    @default("[]")
+  notes       String?
+  unitPrice   Decimal @db.Decimal(10, 2)
+  quantity    Int     @default(1)
+  lineTotal   Decimal @db.Decimal(10, 2)
+
+  @@index([orderId])
+  @@index([dishId])
+}
+
+model Payment {
+  id         String        @id @default(cuid())
+  orderId    String
+  order      Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider   String        @default("manual")
+  amount     Decimal       @db.Decimal(10, 2)
+  status     PaymentStatus @default(PENDING)
+  reference  String?
+  rawPayload Json?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([orderId])
+}
+
+// ---------------------------------------------------------------------------
+// Reservations
+// ---------------------------------------------------------------------------
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+  COMPLETED
+  CANCELLED
+}
+
+model Reservation {
+  id             String            @id @default(cuid())
+  reference      String            @unique
+  customerId     String?
+  customer       Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  name           String
+  phone          String
+  email          String?
+  date           DateTime          @db.Date
+  time           String
+  guests         Int
+  specialRequest String?
+  status         ReservationStatus @default(PENDING)
+  adminNote      String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  @@index([date])
+  @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Offers & coupons
+// ---------------------------------------------------------------------------
+
+enum CouponType {
+  PERCENT
+  FIXED
+}
+
+model Coupon {
+  id              String        @id @default(cuid())
+  code            String        @unique
+  title           String
+  description     String?
+  type            CouponType    @default(PERCENT)
+  value           Decimal       @db.Decimal(10, 2)
+  maxDiscount     Decimal?      @db.Decimal(10, 2)
+  minOrderValue   Decimal       @default(0) @db.Decimal(10, 2)
+  usageLimit      Int?
+  perCustomerLimit Int?
+  usedCount       Int           @default(0)
+  startsAt        DateTime?
+  expiresAt       DateTime?
+  active          Boolean       @default(true)
+  showOnSite      Boolean       @default(true)
+  badge           String?
+  imageUrl        String?
+  displayOrder    Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  usages          CouponUsage[]
+
+  @@index([active])
+}
+
+model CouponUsage {
+  id            String   @id @default(cuid())
+  couponId      String
+  coupon        Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  orderId       String?
+  order         Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  customerPhone String?
+  discount      Decimal  @db.Decimal(10, 2)
+  createdAt     DateTime @default(now())
+
+  @@index([couponId])
+  @@index([customerPhone])
+}
+
+// ---------------------------------------------------------------------------
+// Content: testimonials, gallery, CMS blocks
+// ---------------------------------------------------------------------------
+
+model Testimonial {
+  id           String   @id @default(cuid())
+  name         String
+  rating       Int      @default(5)
+  message      String
+  photoUrl     String?
+  location     String?
+  active       Boolean  @default(true)
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model GalleryImage {
+  id           String   @id @default(cuid())
+  url          String
+  caption      String?
+  alt          String?
+  category     String   @default("Food")
+  displayOrder Int      @default(0)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([category])
+  @@index([displayOrder])
+}
+
+/// Free-form CMS blocks (homepage hero, about page, SEO copy...) keyed by slug.
+model ContentBlock {
+  key       String   @id
+  data      Json
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Settings & operations
+// ---------------------------------------------------------------------------
+
+enum OpenState {
+  AUTO
+  OPEN
+  CLOSED
+}
+
+model RestaurantSettings {
+  id       String @id @default("default")
+  // Identity
+  name     String @default("Muchhad — The Urban Dhaba")
+  tagline  String @default("Authentic Flavours. Made Fresh. Served With Love.")
+  logoUrl  String?
+  about    String?
+  cuisines String[] @default([])
+  priceRange String @default("₹₹")
+
+  // Contact
+  address        String  @default("")
+  latitude       Float?
+  longitude      Float?
+  mapsUrl        String?
+  mapsEmbedUrl   String?
+  phone          String  @default("")
+  email          String  @default("")
+
+  // Integrations (configurable — never hard-coded)
+  whatsappNumber              String  @default("")
+  whatsappCountryCode         String  @default("91")
+  whatsappDefaultMessage      String  @default("Hello! I'd like to know more about {{restaurant_name}}.")
+  whatsappOrderTemplate       String  @default("")
+  whatsappReservationTemplate String  @default("")
+  zomatoUrl                   String?
+  swiggyUrl                   String?
+  instagramUrl                String?
+  facebookUrl                 String?
+  youtubeUrl                  String?
+  googleBusinessUrl           String?
+
+  // Ordering
+  deliveryEnabled       Boolean @default(true)
+  pickupEnabled         Boolean @default(true)
+  directOrderingEnabled Boolean @default(true)
+  minOrderValue         Decimal @default(0) @db.Decimal(10, 2)
+  deliveryFee           Decimal @default(0) @db.Decimal(10, 2)
+  freeDeliveryThreshold Decimal? @db.Decimal(10, 2)
+  taxPercent            Decimal @default(5) @db.Decimal(5, 2)
+  currency              String  @default("INR")
+
+  // Payments (credentials live in env, never in the database or client)
+  codEnabled            Boolean @default(true)
+  upiEnabled            Boolean @default(false)
+  onlinePaymentEnabled  Boolean @default(false)
+  paymentProvider       String  @default("razorpay")
+  upiId                 String?
+
+  // Operations
+  openState       OpenState @default(AUTO)
+  closedMessage   String    @default("We're currently closed.")
+
+  // Notifications
+  notifyEmail        String?
+  notifyOnNewOrder   Boolean @default(true)
+  notifyOnReservation Boolean @default(true)
+  notifyOnContact    Boolean @default(true)
+
+  // SEO
+  seoTitle       String?
+  seoDescription String?
+  ogImage        String?
+
+  updatedAt DateTime @updatedAt
+}
+
+model BusinessHours {
+  id        String  @id @default(cuid())
+  /// 0 = Sunday … 6 = Saturday
+  dayOfWeek Int     @unique
+  isOpen    Boolean @default(true)
+  openTime  String  @default("11:00")
+  closeTime String  @default("23:00")
+}
+
+enum NotificationType {
+  ORDER
+  RESERVATION
+  CUSTOMER
+  CONTACT
+  SYSTEM
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  type      NotificationType
+  title     String
+  message   String
+  link      String?
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([read])
+  @@index([createdAt])
+}
+
+enum MessageStatus {
+  NEW
+  READ
+  ARCHIVED
+}
+
+model ContactMessage {
+  id        String        @id @default(cuid())
+  name      String
+  phone     String
+  email     String?
+  subject   String
+  message   String
+  status    MessageStatus @default(NEW)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([status])
+}
